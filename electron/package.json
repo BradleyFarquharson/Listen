@@ -1,0 +1,47 @@
+{
+  "name": "listen",
+  "version": "0.1.0",
+  "description": "Lightweight local speech-to-text",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "Bradley Farquharson",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.listen.app",
+    "productName": "Listen",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "style.css",
+      "renderer.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/listen",
+        "to": "listen",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "../assets/icon.icns",
+      "target": ["dmg"]
+    },
+    "win": {
+      "icon": "../assets/icon.ico",
+      "target": ["nsis"]
+    },
+    "linux": {
+      "icon": "../assets/icon.png",
+      "target": ["AppImage"]
+    }
+  }
+}

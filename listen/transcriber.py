@@ -11,9 +11,10 @@ console = Console()
 class Transcriber:
     """Thin wrapper around onnx-asr with lazy model loading."""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, on_status=None):
         self.config = config
         self._model = None
+        self._on_status = on_status or (lambda msg: console.print(f"[dim]{msg}[/dim]"))
 
     def _ensure_loaded(self) -> None:
         if self._model is not None:
@@ -21,11 +22,14 @@ class Transcriber:
 
         import onnx_asr
 
-        console.print(f"[dim]Loading model: {self.config.model}...[/dim]")
+        self._on_status(f"Loading model: {self.config.model}...")
 
         kwargs = {}
         if self.config.quantization:
             kwargs["quantization"] = self.config.quantization
+
+        # Use CPU provider to avoid CoreML initialization issues on macOS
+        kwargs["providers"] = ["CPUExecutionProvider"]
 
         model = onnx_asr.load_model(self.config.model, **kwargs)
 
@@ -35,7 +39,7 @@ class Transcriber:
                 vad = onnx_asr.load_vad("silero")
                 model = model.with_vad(vad)
             except Exception:
-                console.print("[dim]VAD not available, continuing without it.[/dim]")
+                self._on_status("VAD not available, continuing without it.")
 
         if self.config.timestamps:
             try:
@@ -44,7 +48,7 @@ class Transcriber:
                 pass
 
         self._model = model
-        console.print("[dim]Model loaded.[/dim]")
+        self._on_status("Model loaded.")
 
     def transcribe_file(self, path: str) -> list[str]:
         """Transcribe an audio file. Returns list of text segments."""

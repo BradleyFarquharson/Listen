@@ -128,6 +128,14 @@ def devices() -> None:
 
 
 @main.command()
+def serve() -> None:
+    """Start JSON-line server for GUI frontend."""
+    from listen.server import run_server
+
+    run_server()
+
+
+@main.command()
 @click.argument("model_name", default="nemo-parakeet-tdt-0.6b-v2")
 def download(model_name: str) -> None:
     """Pre-download a model for offline use."""

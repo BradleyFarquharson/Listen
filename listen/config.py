@@ -23,7 +23,7 @@ class Config:
     quantization: str | None = None  # "int8" for smaller/faster
 
     # Mode
-    mode: str = "toggle-mute"  # "toggle-mute" or "push-to-talk"
+    mode: str = "push-to-talk"  # "push-to-talk" or "toggle-mute"
     hotkey: str = ""  # empty = use mode default
 
     # Audio

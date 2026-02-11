@@ -24,11 +24,20 @@ pip install -e ".[build]"
 ```
 listen/
   cli.py          # CLI commands (Click)
-  engine.py       # Main loop: hotkeys + audio + transcription
+  engine.py       # Main loop: hotkeys + audio + transcription (CLI mode)
   audio.py        # Microphone capture + silence detection
   transcriber.py  # ONNX model wrapper
   config.py       # Configuration loading
+  server.py       # JSON-line server for Electron frontend
   permissions.py  # Platform-specific permission checks
+
+electron/
+  main.js         # Electron main process — spawns Python, IPC, hotkeys
+  preload.js      # Context bridge
+  index.html      # UI markup
+  style.css       # Dark theme styling
+  renderer.js     # UI logic + message handling
+  package.json    # Electron dependencies
 ```
 
 ## Guidelines

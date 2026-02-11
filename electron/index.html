@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Listen</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Draggable titlebar -->
+  <header id="titlebar">
+    <span class="title">LISTEN</span>
+  </header>
+
+  <!-- Status bar -->
+  <section id="status-bar">
+    <span id="status-dot"></span>
+    <span id="status-text">Starting...</span>
+  </section>
+
+  <!-- Transcript area -->
+  <section id="transcript">
+    <div id="transcript-content"></div>
+  </section>
+
+  <!-- Settings -->
+  <section id="settings">
+    <div class="setting-row">
+      <label>Mode</label>
+      <select id="mode-select">
+        <option value="push-to-talk">Push to Talk</option>
+        <option value="toggle-mute">Toggle Mute</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label>Hotkey</label>
+      <input type="text" id="hotkey-input" placeholder="ctrl+shift+space" spellcheck="false">
+    </div>
+    <div class="setting-row">
+      <label>Device</label>
+      <select id="device-select">
+        <option value="">System Default</option>
+      </select>
+    </div>
+  </section>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

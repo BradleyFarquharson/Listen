@@ -12,3 +12,8 @@ venv/
 .DS_Store
 .claude/
 assets/icon.iconset/
+
+# Electron
+electron/node_modules/
+electron/build/
+electron/dist/
