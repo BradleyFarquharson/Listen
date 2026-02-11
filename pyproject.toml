@@ -1,0 +1,25 @@
+[project]
+name = "listen"
+version = "0.1.0"
+description = "Lightweight local speech-to-text"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+dependencies = [
+    "onnx-asr[cpu,hub]>=0.10.2",
+    "sounddevice>=0.5.0",
+    "numpy>=1.24",
+    "pynput>=1.7",
+    "click>=8.1",
+    "rich>=13.0",
+]
+
+[project.scripts]
+listen = "listen.cli:main"
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.0"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
