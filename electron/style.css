@@ -222,6 +222,43 @@ body {
   color: hsl(var(--muted-foreground) / 0.5);
 }
 
+/* Hotkey row with Globe button */
+.hotkey-row {
+  display: flex;
+  gap: 4px;
+}
+
+.hotkey-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.globe-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid hsl(var(--input));
+  background: hsl(var(--background));
+  color: hsl(var(--muted-foreground));
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.globe-btn:hover {
+  border-color: hsl(var(--ring) / 0.3);
+  color: hsl(var(--foreground));
+}
+
+.globe-btn.active {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
 /* Theme switcher */
 .theme-switcher {
   display: flex;

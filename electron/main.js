@@ -8,10 +8,12 @@ const {
 } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 let mainWindow;
 let pillWindow;
 let pythonProcess;
+let globeProcess = null;
 let currentHotkey = null;
 let currentMode = "push-to-talk";
 let isActive = false;
@@ -21,7 +23,7 @@ function getPythonCommand() {
   const resourcePath = process.resourcesPath;
   const bundled = path.join(resourcePath, "listen", "listen");
   try {
-    require("fs").accessSync(bundled, require("fs").constants.X_OK);
+    fs.accessSync(bundled, fs.constants.X_OK);
     return [bundled, ["serve"]];
   } catch {
     return ["listen", ["serve"]];
@@ -141,6 +143,111 @@ function hidePill() {
 }
 
 // ============================================================
+// Globe (fn) key listener — native Swift helper
+// ============================================================
+
+function isGlobeHotkey(hotkey) {
+  const h = hotkey.toLowerCase().trim();
+  return h === "fn" || h === "globe";
+}
+
+function getGlobeBinaryPath() {
+  // Check resources dir (development)
+  const devPath = path.join(__dirname, "resources", "globe-listener");
+  if (fs.existsSync(devPath)) return devPath;
+
+  // Check bundled resources (production)
+  const prodPath = path.join(process.resourcesPath, "globe-listener");
+  if (fs.existsSync(prodPath)) return prodPath;
+
+  return null;
+}
+
+function startGlobeListener() {
+  stopGlobeListener();
+
+  if (process.platform !== "darwin") {
+    console.warn("Globe key listener only supported on macOS");
+    return false;
+  }
+
+  const binaryPath = getGlobeBinaryPath();
+  if (!binaryPath) {
+    console.error("Globe listener binary not found. Run: node scripts/build-globe-listener.js");
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("backend-message", {
+        type: "error",
+        message: "Globe key binary not found. Run: npm run compile:native",
+      });
+    }
+    return false;
+  }
+
+  globeProcess = spawn(binaryPath, [], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  let buffer = "";
+
+  globeProcess.stdout.on("data", (data) => {
+    buffer += data.toString();
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      const msg = line.trim();
+      if (msg === "READY") {
+        console.log("Globe listener ready");
+        // Tell renderer the Globe key is active
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("backend-message", {
+            type: "globe_status",
+            active: true,
+          });
+        }
+      } else if (msg === "FN_DOWN") {
+        if (!isActive) {
+          isActive = true;
+          sendToBackend({ action: "set_active", active: true });
+        }
+      } else if (msg === "FN_UP") {
+        if (isActive) {
+          isActive = false;
+          sendToBackend({ action: "set_active", active: false });
+        }
+      }
+    }
+  });
+
+  globeProcess.stderr.on("data", (data) => {
+    const msg = data.toString().trim();
+    console.error("[globe]", msg);
+    if (msg.includes("Accessibility")) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("backend-message", {
+          type: "error",
+          message: "Globe key requires Accessibility permission. Go to System Settings → Privacy & Security → Accessibility and add Listen.",
+        });
+      }
+    }
+  });
+
+  globeProcess.on("close", (code) => {
+    console.log(`Globe listener exited with code ${code}`);
+    globeProcess = null;
+  });
+
+  return true;
+}
+
+function stopGlobeListener() {
+  if (globeProcess) {
+    globeProcess.kill();
+    globeProcess = null;
+  }
+}
+
+// ============================================================
 // Python backend
 // ============================================================
 
@@ -209,16 +316,39 @@ function sendToBackend(msg) {
   }
 }
 
+// ============================================================
+// Hotkey registration
+// ============================================================
+
 function registerHotkey(hotkey) {
+  // Unregister previous hotkey
   if (currentHotkey) {
-    try {
-      globalShortcut.unregister(formatHotkey(currentHotkey));
-    } catch {
-      // ignore
+    if (isGlobeHotkey(currentHotkey)) {
+      stopGlobeListener();
+    } else {
+      try {
+        globalShortcut.unregister(formatHotkey(currentHotkey));
+      } catch {
+        // ignore
+      }
     }
   }
 
   currentHotkey = hotkey;
+
+  // Globe/fn key — use native Swift listener
+  if (isGlobeHotkey(hotkey)) {
+    const started = startGlobeListener();
+    if (!started && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("backend-message", {
+        type: "error",
+        message: "Could not start Globe key listener.",
+      });
+    }
+    return;
+  }
+
+  // Regular hotkey — use Electron globalShortcut
   const electronHotkey = formatHotkey(hotkey);
 
   try {
@@ -230,7 +360,6 @@ function registerHotkey(hotkey) {
 
     if (!success) {
       console.error(`Failed to register hotkey: ${electronHotkey}`);
-      // Notify renderer about the failure
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("backend-message", {
           type: "error",
@@ -250,8 +379,6 @@ function registerHotkey(hotkey) {
 }
 
 // Convert our hotkey format to Electron accelerator format.
-// Supports: single function keys (F1-F24), single special keys,
-// modifier combos (ctrl+shift+space), etc.
 function formatHotkey(hotkey) {
   return hotkey
     .split("+")
@@ -288,7 +415,10 @@ function formatHotkey(hotkey) {
     .join("+");
 }
 
+// ============================================================
 // IPC handlers
+// ============================================================
+
 ipcMain.on("send-command", (_event, msg) => {
   sendToBackend(msg);
 });
@@ -300,6 +430,16 @@ ipcMain.on("update-hotkey", (_event, hotkey) => {
 ipcMain.handle("get-system-dark", () => {
   return nativeTheme.shouldUseDarkColors;
 });
+
+// Tell the renderer whether the Globe key is available on this platform
+ipcMain.handle("get-globe-available", () => {
+  if (process.platform !== "darwin") return false;
+  return getGlobeBinaryPath() !== null;
+});
+
+// ============================================================
+// App lifecycle
+// ============================================================
 
 app.whenReady().then(() => {
   createWindow();
@@ -315,6 +455,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   sendToBackend({ action: "quit" });
   hidePill();
+  stopGlobeListener();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -323,6 +464,7 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   hidePill();
+  stopGlobeListener();
   if (pythonProcess) {
     sendToBackend({ action: "quit" });
     setTimeout(() => {

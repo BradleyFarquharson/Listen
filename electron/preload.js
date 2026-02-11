@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("listen", {
   onMessage: (callback) =>
     ipcRenderer.on("backend-message", (_event, msg) => callback(msg)),
   getSystemDark: () => ipcRenderer.invoke("get-system-dark"),
+  getGlobeAvailable: () => ipcRenderer.invoke("get-globe-available"),
   onSystemThemeChanged: (callback) =>
     ipcRenderer.on("system-theme-changed", (_event, data) => callback(data)),
 });

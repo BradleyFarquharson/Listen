@@ -8,6 +8,7 @@ const settingsPopover = document.getElementById("settings-popover");
 const transcriptContent = document.getElementById("transcript-content");
 const modeSelect = document.getElementById("mode-select");
 const hotkeyInput = document.getElementById("hotkey-input");
+const globeBtn = document.getElementById("globe-btn");
 const deviceSelect = document.getElementById("device-select");
 const statWords = document.getElementById("stat-words");
 const statSegments = document.getElementById("stat-segments");
@@ -91,6 +92,39 @@ window.listen.onSystemThemeChanged(async (data) => {
 });
 
 initTheme();
+
+// ============================================================
+// Globe key button (macOS only)
+// ============================================================
+
+async function initGlobeButton() {
+  const available = await window.listen.getGlobeAvailable();
+  if (available) {
+    globeBtn.classList.remove("hidden");
+  }
+}
+
+globeBtn.addEventListener("click", () => {
+  const isCurrentlyGlobe =
+    hotkeyInput.value.toLowerCase() === "fn" ||
+    hotkeyInput.value.toLowerCase() === "globe";
+
+  if (isCurrentlyGlobe) {
+    // Toggle off — revert to F5
+    hotkeyInput.value = "F5";
+    hotkeyInput.dataset.current = "F5";
+    globeBtn.classList.remove("active");
+    window.listen.updateHotkey("F5");
+  } else {
+    // Set to Globe key
+    hotkeyInput.value = "fn";
+    hotkeyInput.dataset.current = "fn";
+    globeBtn.classList.add("active");
+    window.listen.updateHotkey("fn");
+  }
+});
+
+initGlobeButton();
 
 // ============================================================
 // Settings popover
@@ -223,7 +257,13 @@ window.listen.onMessage((msg) => {
 
 function handleState(msg) {
   if (msg.mode) modeSelect.value = msg.mode;
-  if (msg.hotkey) hotkeyInput.value = msg.hotkey;
+  if (msg.hotkey) {
+    hotkeyInput.value = msg.hotkey;
+    hotkeyInput.dataset.current = msg.hotkey;
+    const isGlobe =
+      msg.hotkey.toLowerCase() === "fn" || msg.hotkey.toLowerCase() === "globe";
+    globeBtn.classList.toggle("active", isGlobe);
+  }
 
   if (msg.state) {
     switch (msg.state) {

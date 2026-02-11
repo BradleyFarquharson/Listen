@@ -17,3 +17,6 @@ assets/icon.iconset/
 electron/node_modules/
 electron/build/
 electron/dist/
+electron/resources/globe-listener
+electron/resources/globe-listener.sha256
+electron/resources/.module-cache/
