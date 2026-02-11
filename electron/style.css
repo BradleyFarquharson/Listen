@@ -72,7 +72,7 @@ body {
 }
 
 /* ============================================================
-   Top bar (drag region + status + hamburger)
+   Top bar (drag region + hamburger)
    ============================================================ */
 
 #drag-region {
@@ -101,6 +101,7 @@ body {
   align-items: center;
   justify-content: center;
   transition: all 0.15s;
+  position: relative;
 }
 
 .menu-btn:hover {
@@ -109,100 +110,52 @@ body {
 }
 
 /* ============================================================
-   Settings overlay (slide-in from right)
+   Settings popover (dropdown from hamburger)
    ============================================================ */
 
-.settings-overlay {
+.settings-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
-  display: flex;
-  justify-content: flex-end;
-  transition: opacity 0.2s;
+  z-index: 49;
 }
 
-.settings-overlay.hidden {
+.settings-backdrop.hidden {
   display: none;
 }
 
-.settings-overlay::before {
-  content: "";
+.settings-popover {
   position: absolute;
-  inset: 0;
-  background: hsl(0 0% 0% / 0.3);
-}
-
-.settings-panel {
-  position: relative;
-  width: 300px;
-  max-width: 85%;
+  top: 44px;
+  right: 16px;
+  width: 260px;
   background: hsl(var(--background));
-  border-left: 1px solid hsl(var(--border));
-  height: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.12), 0 1px 4px hsl(0 0% 0% / 0.08);
+  z-index: 50;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  animation: slideIn 0.2s ease;
+  gap: 14px;
 }
 
-@keyframes slideIn {
-  from { transform: translateX(100%); }
-  to   { transform: translateX(0); }
-}
-
-.settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid hsl(var(--border));
-}
-
-.settings-header h3 {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.icon-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  border-radius: var(--radius);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-
-.icon-btn:hover {
-  background: hsl(var(--accent));
-  color: hsl(var(--foreground));
-}
-
-.settings-body {
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
-  flex: 1;
+.settings-popover.hidden {
+  display: none;
 }
 
 .setting-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .setting-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -216,9 +169,9 @@ body {
   background: hsl(var(--background));
   border: 1px solid hsl(var(--input));
   color: hsl(var(--foreground));
-  padding: 8px 32px 8px 12px;
+  padding: 6px 28px 6px 10px;
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: 12px;
   font-family: var(--font-sans);
   width: 100%;
   outline: none;
@@ -227,7 +180,7 @@ body {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
+  background-position: right 8px center;
   transition: border-color 0.15s;
 }
 
@@ -245,13 +198,14 @@ body {
   background: hsl(var(--background));
   border: 1px solid hsl(var(--input));
   color: hsl(var(--foreground));
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: 12px;
   font-family: var(--font-mono);
   width: 100%;
   outline: none;
   transition: border-color 0.15s;
+  cursor: pointer;
 }
 
 .setting-group input:hover {
@@ -261,6 +215,7 @@ body {
 .setting-group input:focus {
   border-color: hsl(var(--ring));
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.1);
+  cursor: text;
 }
 
 .setting-group input::placeholder {
@@ -281,7 +236,7 @@ body {
   align-items: center;
   justify-content: center;
   flex: 1;
-  height: 32px;
+  height: 28px;
   border: none;
   background: transparent;
   color: hsl(var(--muted-foreground));
@@ -296,6 +251,13 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   box-shadow: 0 1px 2px hsl(0 0% 0% / 0.05);
+}
+
+/* Separator line between groups */
+.setting-separator {
+  height: 1px;
+  background: hsl(var(--border));
+  margin: 0 -2px;
 }
 
 /* ============================================================
@@ -392,8 +354,3 @@ body {
    ============================================================ */
 
 .hidden { display: none !important; }
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}

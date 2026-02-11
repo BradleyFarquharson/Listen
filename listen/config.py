@@ -45,9 +45,7 @@ class Config:
     def effective_hotkey(self) -> str:
         if self.hotkey:
             return self.hotkey
-        if self.mode == "push-to-talk":
-            return "ctrl+shift+space"
-        return "ctrl+shift+m"
+        return "F5"
 
 
 def load_config(**cli_overrides: object) -> Config:

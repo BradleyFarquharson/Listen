@@ -3,8 +3,8 @@
 // ============================================================
 
 const menuBtn = document.getElementById("menu-btn");
-const settingsOverlay = document.getElementById("settings-overlay");
-const settingsClose = document.getElementById("settings-close");
+const settingsBackdrop = document.getElementById("settings-backdrop");
+const settingsPopover = document.getElementById("settings-popover");
 const transcriptContent = document.getElementById("transcript-content");
 const modeSelect = document.getElementById("mode-select");
 const hotkeyInput = document.getElementById("hotkey-input");
@@ -93,28 +93,33 @@ window.listen.onSystemThemeChanged(async (data) => {
 initTheme();
 
 // ============================================================
-// Settings menu
+// Settings popover
 // ============================================================
 
+function openSettings() {
+  settingsPopover.classList.remove("hidden");
+  settingsBackdrop.classList.remove("hidden");
+}
+
+function closeSettings() {
+  settingsPopover.classList.add("hidden");
+  settingsBackdrop.classList.add("hidden");
+}
+
 menuBtn.addEventListener("click", () => {
-  settingsOverlay.classList.remove("hidden");
-});
-
-settingsClose.addEventListener("click", () => {
-  settingsOverlay.classList.add("hidden");
-});
-
-// Close on backdrop click (clicking the overlay itself, not the panel)
-settingsOverlay.addEventListener("click", (e) => {
-  if (e.target === settingsOverlay) {
-    settingsOverlay.classList.add("hidden");
+  if (settingsPopover.classList.contains("hidden")) {
+    openSettings();
+  } else {
+    closeSettings();
   }
 });
 
+settingsBackdrop.addEventListener("click", closeSettings);
+
 // Close on Escape
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !settingsOverlay.classList.contains("hidden")) {
-    settingsOverlay.classList.add("hidden");
+  if (e.key === "Escape" && !settingsPopover.classList.contains("hidden")) {
+    closeSettings();
   }
 });
 
@@ -271,38 +276,69 @@ modeSelect.addEventListener("change", () => {
   window.listen.send({ action: "set_mode", mode: modeSelect.value });
 });
 
+// Hotkey input — accepts ANY key press (single key or combo)
+let hotkeyListening = false;
+
 hotkeyInput.addEventListener("click", () => {
+  hotkeyListening = true;
   hotkeyInput.removeAttribute("readonly");
   hotkeyInput.value = "";
-  hotkeyInput.placeholder = "Press a key combo...";
+  hotkeyInput.placeholder = "Press any key...";
 });
 
 hotkeyInput.addEventListener("keydown", (e) => {
+  if (!hotkeyListening) return;
   e.preventDefault();
+  e.stopPropagation();
+
   const parts = [];
   if (e.ctrlKey) parts.push("ctrl");
   if (e.shiftKey) parts.push("shift");
   if (e.altKey) parts.push("alt");
   if (e.metaKey) parts.push("cmd");
 
-  const key = e.key.toLowerCase();
-  if (!["control", "shift", "alt", "meta"].includes(key)) {
-    parts.push(key === " " ? "space" : key);
+  const key = e.key;
+
+  // Skip if only a modifier was pressed (wait for the actual key)
+  if (["Control", "Shift", "Alt", "Meta"].includes(key)) {
+    return;
   }
 
-  if (parts.length >= 2) {
-    const hotkey = parts.join("+");
-    hotkeyInput.value = hotkey;
+  // Normalize the key name
+  let keyName;
+  if (key === " ") {
+    keyName = "space";
+  } else if (key === "Escape") {
+    // Cancel hotkey recording
+    hotkeyListening = false;
     hotkeyInput.setAttribute("readonly", "");
-    hotkeyInput.placeholder = "Press keys...";
-    window.listen.updateHotkey(hotkey);
+    hotkeyInput.placeholder = "Click to set...";
+    hotkeyInput.value = hotkeyInput.dataset.current || "";
     hotkeyInput.blur();
+    return;
+  } else {
+    keyName = key.length === 1 ? key.toLowerCase() : key;
   }
+
+  parts.push(keyName);
+  const hotkey = parts.join("+");
+
+  hotkeyListening = false;
+  hotkeyInput.value = hotkey;
+  hotkeyInput.dataset.current = hotkey;
+  hotkeyInput.setAttribute("readonly", "");
+  hotkeyInput.placeholder = "Click to set...";
+  window.listen.updateHotkey(hotkey);
+  hotkeyInput.blur();
 });
 
 hotkeyInput.addEventListener("blur", () => {
+  if (hotkeyListening) {
+    hotkeyListening = false;
+    hotkeyInput.value = hotkeyInput.dataset.current || "";
+  }
   hotkeyInput.setAttribute("readonly", "");
-  hotkeyInput.placeholder = "Press keys...";
+  hotkeyInput.placeholder = "Click to set...";
 });
 
 deviceSelect.addEventListener("change", () => {

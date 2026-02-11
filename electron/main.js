@@ -230,24 +230,59 @@ function registerHotkey(hotkey) {
 
     if (!success) {
       console.error(`Failed to register hotkey: ${electronHotkey}`);
+      // Notify renderer about the failure
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("backend-message", {
+          type: "error",
+          message: `Could not register hotkey "${hotkey}". Try a function key (F1-F24) or a modifier combo (e.g. Ctrl+Space).`,
+        });
+      }
     }
   } catch (err) {
     console.error(`Hotkey registration error: ${err.message}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("backend-message", {
+        type: "error",
+        message: `Invalid hotkey "${hotkey}". Try a function key (F1-F24) or a modifier combo (e.g. Ctrl+Space).`,
+      });
+    }
   }
 }
 
+// Convert our hotkey format to Electron accelerator format.
+// Supports: single function keys (F1-F24), single special keys,
+// modifier combos (ctrl+shift+space), etc.
 function formatHotkey(hotkey) {
   return hotkey
     .split("+")
     .map((part) => {
       const p = part.trim().toLowerCase();
-      if (p === "ctrl") return "Ctrl";
+      if (p === "ctrl" || p === "control") return "Ctrl";
       if (p === "shift") return "Shift";
-      if (p === "alt") return "Alt";
+      if (p === "alt" || p === "option") return "Alt";
       if (p === "cmd" || p === "command" || p === "meta") return "Command";
       if (p === "space") return "Space";
       if (p === "tab") return "Tab";
       if (p === "enter" || p === "return") return "Return";
+      if (p === "backspace") return "Backspace";
+      if (p === "delete") return "Delete";
+      if (p === "escape" || p === "esc") return "Escape";
+      if (p === "arrowup" || p === "up") return "Up";
+      if (p === "arrowdown" || p === "down") return "Down";
+      if (p === "arrowleft" || p === "left") return "Left";
+      if (p === "arrowright" || p === "right") return "Right";
+      if (p === "pageup") return "PageUp";
+      if (p === "pagedown") return "PageDown";
+      if (p === "home") return "Home";
+      if (p === "end") return "End";
+      if (p === "insert") return "Insert";
+      if (p === "printscreen") return "PrintScreen";
+      // Function keys: f1-f24
+      const fMatch = p.match(/^f(\d+)$/);
+      if (fMatch) return `F${fMatch[1]}`;
+      // Single letter/number — uppercase for Electron
+      if (p.length === 1) return p.toUpperCase();
+      // Anything else — capitalize first letter
       return p.charAt(0).toUpperCase() + p.slice(1);
     })
     .join("+");
