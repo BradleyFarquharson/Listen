@@ -2,21 +2,27 @@
 // DOM elements
 // ============================================================
 
-const recordBtn = document.getElementById("record-btn");
-const iconMic = document.getElementById("icon-mic");
-const iconMicOff = document.getElementById("icon-mic-off");
-const iconLoader = document.getElementById("icon-loader");
+const statusDot = document.getElementById("status-dot");
 const statusText = document.getElementById("status-text");
-const hotkeyHint = document.getElementById("hotkey-hint");
+const menuBtn = document.getElementById("menu-btn");
+const settingsOverlay = document.getElementById("settings-overlay");
+const settingsClose = document.getElementById("settings-close");
 const transcriptContent = document.getElementById("transcript-content");
 const modeSelect = document.getElementById("mode-select");
 const hotkeyInput = document.getElementById("hotkey-input");
 const deviceSelect = document.getElementById("device-select");
-const settingsToggle = document.getElementById("settings-toggle");
-const settingsBody = document.getElementById("settings-body");
+const statWords = document.getElementById("stat-words");
+const statSegments = document.getElementById("stat-segments");
+const statTime = document.getElementById("stat-time");
 
 let modelLoaded = false;
 let currentState = "idle";
+
+// Stats tracking
+let totalWords = 0;
+let totalSegments = 0;
+let sessionStartTime = null;
+let sessionTimer = null;
 
 // ============================================================
 // Theme management
@@ -27,40 +33,29 @@ let themePreference = localStorage.getItem("theme") || "system";
 async function initTheme() {
   const systemDark = await window.listen.getSystemDark();
   applyTheme(themePreference, systemDark);
-
-  // Update active button
   document.querySelectorAll(".theme-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.theme === themePreference);
   });
 }
 
 function applyTheme(preference, systemDark) {
-  let dark;
-  if (preference === "system") {
-    dark = systemDark;
-  } else {
-    dark = preference === "dark";
-  }
-
+  const dark =
+    preference === "system" ? systemDark : preference === "dark";
   document.documentElement.classList.toggle("dark", dark);
 }
 
-// Theme button clicks
 document.querySelectorAll(".theme-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
     themePreference = btn.dataset.theme;
     localStorage.setItem("theme", themePreference);
-
     const systemDark = await window.listen.getSystemDark();
     applyTheme(themePreference, systemDark);
-
     document.querySelectorAll(".theme-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.theme === themePreference);
     });
   });
 });
 
-// Listen for system theme changes
 window.listen.onSystemThemeChanged(async (data) => {
   if (themePreference === "system") {
     applyTheme("system", data.dark);
@@ -70,39 +65,47 @@ window.listen.onSystemThemeChanged(async (data) => {
 initTheme();
 
 // ============================================================
-// Settings panel toggle
+// Settings menu
 // ============================================================
 
-settingsToggle.addEventListener("click", () => {
-  settingsToggle.classList.toggle("open");
-  settingsBody.classList.toggle("open");
+menuBtn.addEventListener("click", () => {
+  settingsOverlay.classList.remove("hidden");
 });
 
-// ============================================================
-// Record button
-// ============================================================
+settingsClose.addEventListener("click", () => {
+  settingsOverlay.classList.add("hidden");
+});
 
-recordBtn.addEventListener("click", () => {
-  if (!modelLoaded) return;
-  if (currentState === "recording" || currentState === "listening") {
-    window.listen.send({ action: "set_active", active: false });
-  } else if (
-    currentState === "ready" ||
-    currentState === "muted" ||
-    currentState === "stopped"
-  ) {
-    window.listen.send({ action: "set_active", active: true });
+// Close on backdrop click (clicking the overlay itself, not the panel)
+settingsOverlay.addEventListener("click", (e) => {
+  if (e.target === settingsOverlay) {
+    settingsOverlay.classList.add("hidden");
+  }
+});
+
+// Close on Escape
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !settingsOverlay.classList.contains("hidden")) {
+    settingsOverlay.classList.add("hidden");
   }
 });
 
 // ============================================================
-// Icon management
+// Session timer
 // ============================================================
 
-function showIcon(which) {
-  iconMic.classList.toggle("hidden", which !== "mic");
-  iconMicOff.classList.toggle("hidden", which !== "mic-off");
-  iconLoader.classList.toggle("hidden", which !== "loader");
+function startSessionTimer() {
+  if (sessionStartTime) return;
+  sessionStartTime = Date.now();
+  sessionTimer = setInterval(updateTimerDisplay, 1000);
+}
+
+function updateTimerDisplay() {
+  if (!sessionStartTime) return;
+  const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  statTime.textContent = `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 // ============================================================
@@ -111,42 +114,27 @@ function showIcon(which) {
 
 function setStatus(state, text) {
   currentState = state;
+  statusDot.className = "";
+  statusDot.classList.add(state);
   statusText.textContent = text;
-
-  // Update button state
-  recordBtn.className = "record-btn";
-  recordBtn.classList.add(state);
-
-  // Update icon
-  switch (state) {
-    case "recording":
-    case "listening":
-      showIcon("mic");
-      break;
-    case "muted":
-    case "ready":
-    case "stopped":
-      showIcon("mic-off");
-      break;
-    case "loading":
-      showIcon("loader");
-      break;
-    case "error":
-      showIcon("mic-off");
-      break;
-    default:
-      showIcon("mic");
-  }
 }
 
 // ============================================================
-// Transcription display
+// Transcription display + stats
 // ============================================================
 
 function addTranscription(text) {
-  const empty = transcriptContent.querySelector(".empty-state");
-  if (empty) empty.remove();
+  // Update stats
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  totalWords += wordCount;
+  totalSegments += 1;
+  statWords.textContent = totalWords.toLocaleString();
+  statSegments.textContent = totalSegments.toLocaleString();
 
+  // Start timer on first transcription
+  startSessionTimer();
+
+  // Add transcript line
   const line = document.createElement("div");
   line.className = "transcript-line";
   line.textContent = text;
@@ -169,7 +157,7 @@ window.listen.onMessage((msg) => {
       addTranscription(msg.text);
       break;
     case "model_loading":
-      setStatus("loading", `Loading model...`);
+      setStatus("loading", "Loading model...");
       break;
     case "model_loaded":
       modelLoaded = true;
@@ -184,21 +172,13 @@ window.listen.onMessage((msg) => {
       break;
     case "error":
       setStatus("error", msg.message);
-      console.error("Backend error:", msg.message);
       break;
   }
 });
 
 function handleState(msg) {
-  if (msg.mode) {
-    modeSelect.value = msg.mode;
-  }
-
-  if (msg.hotkey) {
-    hotkeyInput.value = msg.hotkey;
-    hotkeyHint.textContent = msg.hotkey;
-    hotkeyHint.classList.add("visible");
-  }
+  if (msg.mode) modeSelect.value = msg.mode;
+  if (msg.hotkey) hotkeyInput.value = msg.hotkey;
 
   if (msg.state) {
     switch (msg.state) {
@@ -259,7 +239,6 @@ hotkeyInput.addEventListener("click", () => {
 
 hotkeyInput.addEventListener("keydown", (e) => {
   e.preventDefault();
-
   const parts = [];
   if (e.ctrlKey) parts.push("ctrl");
   if (e.shiftKey) parts.push("shift");

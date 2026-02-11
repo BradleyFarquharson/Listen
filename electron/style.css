@@ -1,9 +1,8 @@
 /* ============================================================
-   shadcn-inspired design tokens (CSS custom properties)
+   shadcn-inspired design tokens
    ============================================================ */
 
 :root {
-  /* Light theme (default) */
   --background: 0 0% 100%;
   --foreground: 240 10% 3.9%;
   --card: 0 0% 100%;
@@ -25,7 +24,6 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
 
-  /* Status colors */
   --color-recording: 0 84% 60%;
   --color-listening: 142 71% 45%;
   --color-muted: 38 92% 50%;
@@ -54,14 +52,10 @@
 }
 
 /* ============================================================
-   Base reset
+   Base
    ============================================================ */
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   font-family: var(--font-sans);
@@ -73,300 +67,190 @@ body {
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   font-size: 14px;
   line-height: 1.5;
 }
 
 /* ============================================================
-   Drag region (invisible titlebar for window dragging)
+   Top bar (drag region + status + hamburger)
    ============================================================ */
 
 #drag-region {
   -webkit-app-region: drag;
-  height: 48px;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-}
-
-/* ============================================================
-   App layout
-   ============================================================ */
-
-#app {
+  height: 52px;
   display: flex;
-  flex-direction: column;
-  height: 100vh;
-  padding-top: 48px; /* Space for drag region / traffic lights */
-}
-
-/* ============================================================
-   Hero section — record button + status
-   ============================================================ */
-
-#hero {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 32px 24px 24px;
-  gap: 12px;
+  justify-content: space-between;
+  padding: 0 16px 0 80px; /* 80px left for macOS traffic lights */
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
-.record-btn {
-  -webkit-app-region: no-drag;
-  width: 72px;
-  height: 72px;
+/* Status pill */
+#status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#status-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 2px solid hsl(var(--border));
-  background: hsl(var(--secondary));
+  background: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+#status-dot.recording  { background: hsl(var(--color-recording)); }
+#status-dot.listening  { background: hsl(var(--color-listening)); }
+#status-dot.muted      { background: hsl(var(--color-muted)); }
+#status-dot.ready      { background: hsl(var(--color-ready)); }
+#status-dot.loading    { background: hsl(var(--color-loading)); }
+#status-dot.error      { background: hsl(var(--color-error)); }
+
+#status-text {
+  font-size: 12px;
+  font-weight: 500;
   color: hsl(var(--muted-foreground));
+}
+
+/* Hamburger button */
+.menu-btn {
+  -webkit-app-region: no-drag;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  border-radius: var(--radius);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  position: relative;
-  outline: none;
+  transition: all 0.15s;
 }
 
-.record-btn:hover {
+.menu-btn:hover {
   background: hsl(var(--accent));
-  border-color: hsl(var(--muted-foreground));
   color: hsl(var(--foreground));
-}
-
-.record-btn:active {
-  transform: scale(0.95);
-}
-
-.record-btn.recording {
-  background: hsl(var(--color-recording) / 0.12);
-  border-color: hsl(var(--color-recording));
-  color: hsl(var(--color-recording));
-  box-shadow: 0 0 0 4px hsl(var(--color-recording) / 0.1);
-}
-
-.record-btn.recording:hover {
-  background: hsl(var(--color-recording) / 0.18);
-}
-
-.record-btn.listening {
-  background: hsl(var(--color-listening) / 0.12);
-  border-color: hsl(var(--color-listening));
-  color: hsl(var(--color-listening));
-  box-shadow: 0 0 0 4px hsl(var(--color-listening) / 0.1);
-}
-
-.record-btn.listening:hover {
-  background: hsl(var(--color-listening) / 0.18);
-}
-
-.record-btn.loading {
-  border-color: hsl(var(--color-loading));
-  color: hsl(var(--color-loading));
-  cursor: default;
-}
-
-.record-btn.error {
-  border-color: hsl(var(--color-error));
-  color: hsl(var(--color-error));
-}
-
-.record-btn.muted {
-  background: hsl(var(--color-muted) / 0.08);
-  border-color: hsl(var(--color-muted) / 0.4);
-  color: hsl(var(--color-muted));
-}
-
-.record-icon {
-  transition: opacity 0.15s ease;
-}
-
-.record-icon.hidden {
-  display: none;
-}
-
-/* Pulse animation for recording */
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 4px hsl(var(--color-recording) / 0.1); }
-  50% { box-shadow: 0 0 0 8px hsl(var(--color-recording) / 0.05); }
-}
-
-.record-btn.recording {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.spinning {
-  animation: spin 1s linear infinite;
-}
-
-.status-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
-  text-align: center;
-}
-
-.hotkey-hint {
-  font-size: 11px;
-  color: hsl(var(--muted-foreground) / 0.7);
-  font-family: var(--font-mono);
-  background: hsl(var(--muted));
-  padding: 2px 8px;
-  border-radius: 4px;
-  display: none;
-}
-
-.hotkey-hint.visible {
-  display: inline-block;
 }
 
 /* ============================================================
-   Transcript area
+   Settings overlay (slide-in from right)
    ============================================================ */
 
-#transcript {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 20px 16px;
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--border)) transparent;
-  border-top: 1px solid hsl(var(--border));
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+  transition: opacity 0.2s;
 }
 
-#transcript::-webkit-scrollbar {
-  width: 6px;
+.settings-overlay.hidden {
+  display: none;
 }
 
-#transcript::-webkit-scrollbar-track {
-  background: transparent;
+.settings-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: hsl(0 0% 0% / 0.3);
 }
 
-#transcript::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 3px;
-}
-
-#transcript-content {
-  user-select: text;
-}
-
-.transcript-line {
-  padding: 10px 12px;
-  margin-top: 8px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: hsl(var(--foreground));
-  background: hsl(var(--muted));
-  border-radius: var(--radius);
+.settings-panel {
+  position: relative;
+  width: 300px;
+  max-width: 85%;
+  background: hsl(var(--background));
+  border-left: 1px solid hsl(var(--border));
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   animation: slideIn 0.2s ease;
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: hsl(var(--muted-foreground));
-  font-size: 13px;
-  padding-top: 48px;
-}
-
-.empty-state svg {
-  opacity: 0.4;
-}
-
-/* ============================================================
-   Settings panel (collapsible)
-   ============================================================ */
-
-#settings-panel {
-  border-top: 1px solid hsl(var(--border));
-  -webkit-app-region: no-drag;
-}
-
-.settings-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: none;
-  border: none;
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.settings-toggle:hover {
-  color: hsl(var(--foreground));
-}
-
-.settings-toggle .chevron {
-  margin-left: auto;
-  transition: transform 0.2s ease;
-}
-
-.settings-toggle.open .chevron {
-  transform: rotate(180deg);
-}
-
-.settings-body {
-  display: none;
-  padding: 0 20px 16px;
-}
-
-.settings-body.open {
-  display: block;
-}
-
-.setting-row {
+.settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid hsl(var(--border));
 }
 
-.setting-row label {
-  font-size: 13px;
+.settings-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.icon-btn:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
+.settings-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setting-label {
+  font-size: 12px;
+  font-weight: 500;
   color: hsl(var(--muted-foreground));
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 80px;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.setting-row label svg {
-  opacity: 0.6;
-  flex-shrink: 0;
+.setting-label svg {
+  opacity: 0.5;
 }
 
 /* shadcn-style select */
-.setting-row select {
+.setting-group select {
   background: hsl(var(--background));
   border: 1px solid hsl(var(--input));
   color: hsl(var(--foreground));
-  padding: 6px 32px 6px 12px;
+  padding: 8px 32px 8px 12px;
   border-radius: var(--radius);
   font-size: 13px;
   font-family: var(--font-sans);
-  width: 180px;
+  width: 100%;
   outline: none;
   cursor: pointer;
   -webkit-appearance: none;
@@ -377,43 +261,43 @@ body {
   transition: border-color 0.15s;
 }
 
-.setting-row select:hover {
+.setting-group select:hover {
   border-color: hsl(var(--ring) / 0.3);
 }
 
-.setting-row select:focus {
+.setting-group select:focus {
   border-color: hsl(var(--ring));
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.1);
 }
 
 /* shadcn-style input */
-.setting-row input {
+.setting-group input {
   background: hsl(var(--background));
   border: 1px solid hsl(var(--input));
   color: hsl(var(--foreground));
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: var(--radius);
   font-size: 13px;
   font-family: var(--font-mono);
-  width: 180px;
+  width: 100%;
   outline: none;
   transition: border-color 0.15s;
 }
 
-.setting-row input:hover {
+.setting-group input:hover {
   border-color: hsl(var(--ring) / 0.3);
 }
 
-.setting-row input:focus {
+.setting-group input:focus {
   border-color: hsl(var(--ring));
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.1);
 }
 
-.setting-row input::placeholder {
+.setting-group input::placeholder {
   color: hsl(var(--muted-foreground) / 0.5);
 }
 
-/* Theme switcher (segmented control) */
+/* Theme switcher */
 .theme-switcher {
   display: flex;
   background: hsl(var(--muted));
@@ -426,8 +310,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 30px;
+  flex: 1;
+  height: 32px;
   border: none;
   background: transparent;
   color: hsl(var(--muted-foreground));
@@ -436,12 +320,110 @@ body {
   transition: all 0.15s;
 }
 
-.theme-btn:hover {
-  color: hsl(var(--foreground));
-}
+.theme-btn:hover { color: hsl(var(--foreground)); }
 
 .theme-btn.active {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   box-shadow: 0 1px 2px hsl(0 0% 0% / 0.05);
+}
+
+/* ============================================================
+   Main app area
+   ============================================================ */
+
+#app {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Stats dashboard
+   ============================================================ */
+
+#stats {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px 24px;
+  flex-shrink: 0;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 90px;
+  padding: 16px 20px;
+  background: hsl(var(--muted));
+  border-radius: var(--radius);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground));
+  line-height: 1.1;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+   Transcript area
+   ============================================================ */
+
+#transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+#transcript::-webkit-scrollbar { width: 6px; }
+#transcript::-webkit-scrollbar-track { background: transparent; }
+#transcript::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+#transcript-content {
+  user-select: text;
+}
+
+.transcript-line {
+  padding: 10px 12px;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted));
+  border-radius: var(--radius);
+  animation: fadeUp 0.2s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+
+.hidden { display: none !important; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
