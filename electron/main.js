@@ -4,11 +4,13 @@ const {
   globalShortcut,
   ipcMain,
   nativeTheme,
+  screen,
 } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 
 let mainWindow;
+let pillWindow;
 let pythonProcess;
 let currentHotkey = null;
 let currentMode = "push-to-talk";
@@ -47,9 +49,9 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    hidePill();
   });
 
-  // Send theme updates to renderer
   nativeTheme.on("updated", () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("system-theme-changed", {
@@ -59,7 +61,89 @@ function createWindow() {
   });
 }
 
-// Spawn the Python backend
+// ============================================================
+// Floating pill window
+// ============================================================
+
+function createPillWindow() {
+  const display = screen.getPrimaryDisplay();
+  const { width: screenW, height: screenH } = display.workAreaSize;
+  const pillW = 200;
+  const pillH = 48;
+
+  pillWindow = new BrowserWindow({
+    width: pillW,
+    height: pillH,
+    x: Math.round((screenW - pillW) / 2),
+    y: screenH - pillH - 32, // 32px from bottom
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    hasShadow: false,
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: true,
+    },
+  });
+
+  pillWindow.loadFile("pill.html");
+  pillWindow.setIgnoreMouseEvents(true);
+
+  pillWindow.on("closed", () => {
+    pillWindow = null;
+  });
+}
+
+function showPill(state) {
+  if (!pillWindow || pillWindow.isDestroyed()) {
+    createPillWindow();
+  }
+
+  // Wait for content to load before sending update
+  if (pillWindow.webContents.isLoading()) {
+    pillWindow.webContents.once("did-finish-load", () => {
+      sendPillUpdate(state);
+    });
+  } else {
+    sendPillUpdate(state);
+  }
+
+  pillWindow.showInactive();
+}
+
+function sendPillUpdate(state) {
+  if (!pillWindow || pillWindow.isDestroyed()) return;
+
+  let text, mode;
+  if (state === "recording") {
+    text = "Recording...";
+    mode = "recording";
+  } else if (state === "listening") {
+    text = "Listening...";
+    mode = "listening";
+  } else {
+    text = state;
+    mode = "recording";
+  }
+
+  pillWindow.webContents.send("pill-update", { text, mode });
+}
+
+function hidePill() {
+  if (pillWindow && !pillWindow.isDestroyed()) {
+    pillWindow.close();
+    pillWindow = null;
+  }
+}
+
+// ============================================================
+// Python backend
+// ============================================================
+
 function startBackend() {
   const [cmd, args] = getPythonCommand();
 
@@ -89,14 +173,18 @@ function startBackend() {
           if (msg.mode) {
             currentMode = msg.mode;
           }
+
+          // Show/hide pill based on active state
           if (msg.state === "recording" || msg.state === "listening") {
             isActive = true;
+            showPill(msg.state);
           } else if (
             msg.state === "ready" ||
             msg.state === "muted" ||
             msg.state === "stopped"
           ) {
             isActive = false;
+            hidePill();
           }
         }
       } catch {
@@ -191,6 +279,7 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   sendToBackend({ action: "quit" });
+  hidePill();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -198,6 +287,7 @@ app.on("window-all-closed", () => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  hidePill();
   if (pythonProcess) {
     sendToBackend({ action: "quit" });
     setTimeout(() => {

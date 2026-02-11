@@ -21,7 +21,8 @@
       "preload.js",
       "index.html",
       "style.css",
-      "renderer.js"
+      "renderer.js",
+      "pill.html"
     ],
     "extraResources": [
       {
