@@ -36,6 +36,10 @@ cp "$SCRIPT_DIR/Listen/Resources/Info.plist" "$CONTENTS/Info.plist"
 # Copy app icon
 cp "$SCRIPT_DIR/Listen/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 
+# Copy menu bar icon
+cp "$SCRIPT_DIR/Listen/Resources/MenuBarIconTemplate.png" "$RESOURCES_DIR/MenuBarIconTemplate.png"
+cp "$SCRIPT_DIR/Listen/Resources/MenuBarIconTemplate@2x.png" "$RESOURCES_DIR/MenuBarIconTemplate@2x.png"
+
 # Copy entitlements (used for signing)
 cp "$SCRIPT_DIR/Listen/Resources/Listen.entitlements" "$CONTENTS/Listen.entitlements"
 

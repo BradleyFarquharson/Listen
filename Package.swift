@@ -18,6 +18,10 @@ let package = Package(
                 "Resources/Listen.entitlements",
                 "Resources/Info.plist",
                 "Resources/AppIcon.icns",
+                "Resources/MenuBarIconTemplate.png",
+                "Resources/MenuBarIconTemplate@2x.png",
+                "Resources/Listen icon.png",
+                "Resources/Listen transparent.png",
             ],
             resources: [
                 .process("Resources/Assets.xcassets"),

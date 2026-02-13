@@ -18,7 +18,11 @@ struct ListenApp: App {
             MenuBarView()
                 .environmentObject(appState)
         } label: {
-            Image(systemName: "mic.fill")
+            if let img = NSImage(named: "MenuBarIconTemplate") {
+                Image(nsImage: img)
+            } else {
+                Image(systemName: "mic.fill")
+            }
         }
         .menuBarExtraStyle(.window)
     }

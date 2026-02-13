@@ -25,12 +25,13 @@ final class AudioLevelStore: ObservableObject {
 /// The floating pill content — shows a dynamic waveform during recording.
 struct RecordingPillView: View {
     @ObservedObject var levelStore: AudioLevelStore
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 1.5) {
             ForEach(Array(levelStore.levels.enumerated()), id: \.offset) { _, level in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.white)
+                Capsule()
+                    .fill(colorScheme == .dark ? Color.white : Color.black)
                     .frame(width: 2.5, height: barHeight(for: level))
                     .animation(.easeOut(duration: 0.08), value: level)
             }
