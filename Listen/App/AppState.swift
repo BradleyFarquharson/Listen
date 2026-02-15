@@ -40,6 +40,8 @@ final class AppState: ObservableObject {
     let textInserter = TextInserter()
     let soundEffects = SoundEffects()
     let permissions = Permissions()
+    let usageStats = UsageStats()
+    let vocabulary = Vocabulary()
 
     // MARK: - Config
     @Published var config = AppConfig()
@@ -261,7 +263,8 @@ final class AppState: ObservableObject {
 
     private func transcribeSegment(_ audioData: [Float]) async {
         do {
-            listenLog("Transcribing segment: \(audioData.count) samples (\(String(format: "%.1f", Float(audioData.count) / 16000.0))s)")
+            let durationSeconds = Double(audioData.count) / 16000.0
+            listenLog("Transcribing segment: \(audioData.count) samples (\(String(format: "%.1f", durationSeconds))s)")
             let text = try await whisperService.transcribe(audioData: audioData)
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             listenLog("Transcription result: '\(trimmed)' (raw: '\(text)')")
@@ -271,9 +274,19 @@ final class AppState: ObservableObject {
                 return
             }
 
+            // Apply vocabulary corrections (case fixes + alias replacement)
+            let corrected = vocabulary.correct(trimmed)
+            if corrected != trimmed {
+                listenLog("Vocabulary corrected: '\(trimmed)' → '\(corrected)'")
+            }
+
+            // Record usage stats
+            let wordCount = corrected.split(separator: " ").count
+            usageStats.recordTranscription(wordCount: wordCount, durationSeconds: durationSeconds)
+
             await MainActor.run {
-                lastTranscription = trimmed
-                transcriptions.append(trimmed)
+                lastTranscription = corrected
+                transcriptions.append(corrected)
                 statusText = "Ready"
                 // Keep bounded
                 if transcriptions.count > 200 {
@@ -282,8 +295,8 @@ final class AppState: ObservableObject {
             }
 
             // Insert text into active app
-            listenLog("Inserting text: '\(trimmed)'")
-            textInserter.insertText(trimmed)
+            listenLog("Inserting text: '\(corrected)'")
+            textInserter.insertText(corrected)
         } catch {
             listenLog("Transcription ERROR: \(error)")
             await MainActor.run {

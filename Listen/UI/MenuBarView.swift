@@ -4,10 +4,13 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @State private var showSettings = false
+    @State private var showVocabulary = false
 
     var body: some View {
         Group {
-            if showSettings {
+            if showVocabulary {
+                vocabularyContent
+            } else if showSettings {
                 settingsContent
             } else {
                 mainContent
@@ -20,6 +23,13 @@ struct MenuBarView: View {
 
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 4) {
+            // Stats card
+            statsCard
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+
+            Divider().padding(.vertical, 2)
+
             // Status
             HStack {
                 Circle()
@@ -30,7 +40,6 @@ struct MenuBarView: View {
                 Spacer()
             }
             .padding(.horizontal, 12)
-            .padding(.top, 8)
 
             // Error message
             if let error = appState.errorMessage {
@@ -115,6 +124,31 @@ struct MenuBarView: View {
                     }
 
                     Text(modeDescription)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                // Vocabulary
+                settingsSection("Vocabulary") {
+                    Button {
+                        showVocabulary = true
+                    } label: {
+                        HStack {
+                            Text("\(appState.vocabulary.entries.count) custom term\(appState.vocabulary.entries.count == 1 ? "" : "s")")
+                                .font(.callout)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("Teach Listen custom words, names, or terms.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -210,6 +244,85 @@ struct MenuBarView: View {
             return .orange
         } else {
             return .gray
+        }
+    }
+
+    // MARK: - Stats Card
+
+    private var statsCard: some View {
+        HStack(spacing: 0) {
+            statColumn(
+                value: "\(appState.usageStats.averageWPM)",
+                unit: "WPM",
+                label: "Avg speed"
+            )
+            Divider().frame(height: 32)
+            statColumn(
+                value: formatNumber(appState.usageStats.wordsThisWeek),
+                unit: "",
+                label: "Words this wk"
+            )
+            Divider().frame(height: 32)
+            statColumn(
+                value: "\(appState.usageStats.timeSavedMinutes)",
+                unit: "min",
+                label: "Saved this wk"
+            )
+        }
+        .padding(.vertical, 10)
+        .background(Color.secondary.opacity(0.08))
+        .cornerRadius(8)
+    }
+
+    private func statColumn(value: String, unit: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 2) {
+                Text(value)
+                    .font(.system(.title3, design: .rounded))
+                    .fontWeight(.semibold)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func formatNumber(_ n: Int) -> String {
+        if n >= 1000 {
+            return String(format: "%.1fk", Double(n) / 1000.0)
+        }
+        return "\(n)"
+    }
+
+    // MARK: - Vocabulary View (inline)
+
+    private var vocabularyContent: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Back button
+            Button {
+                showVocabulary = false
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.caption)
+                    Text("Settings")
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            Divider().padding(.vertical, 2)
+
+            VocabularyView(vocabulary: appState.vocabulary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
         }
     }
 }
