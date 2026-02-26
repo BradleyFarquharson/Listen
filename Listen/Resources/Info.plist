@@ -24,5 +24,7 @@
 	<string>14.0</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Listen needs microphone access for speech-to-text transcription.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Listen needs to pause and resume media playback during voice recording.</string>
 </dict>
 </plist>

@@ -33,18 +33,17 @@ final class AppState: ObservableObject {
 
     // MARK: - Services
     let audioCaptureService = AudioCaptureService()
-    let voiceActivityDetector = VoiceActivityDetector()
     let whisperService = WhisperService()
     let globeKeyMonitor = GlobeKeyMonitor()
     let hotkeyManager = HotkeyManager()
     let textInserter = TextInserter()
     let soundEffects = SoundEffects()
     let permissions = Permissions()
-
     // MARK: - Config
     @Published var config = AppConfig()
 
-    private var audioTask: Task<Void, Never>?
+    /// Accumulated audio samples during recording.
+    private var audioSamples: [Float] = []
     private var cancellables = Set<AnyCancellable>()
 
     init() {
@@ -79,12 +78,12 @@ final class AppState: ObservableObject {
         isModelLoading = true
 
         do {
-            listenLog("Loading Parakeet TDT 0.6B model (auto-downloads on first run)...")
-            try await whisperService.loadModel(path: "")  // FluidAudio handles download internally
+            listenLog("Loading Parakeet TDT 0.6B v2 model (auto-downloads on first run)...")
+            try await whisperService.loadModel()
             isModelLoaded = true
             isModelLoading = false
             statusText = "Ready"
-            listenLog("Parakeet model loaded — Ready!")
+            listenLog("Parakeet v2 model loaded — Ready!")
         } catch {
             isModelLoading = false
             errorMessage = "Failed to load model: \(error.localizedDescription)"
@@ -195,6 +194,7 @@ final class AppState: ObservableObject {
         listenLog("START recording")
         isRecording = true
         statusText = "Recording..."
+        audioSamples = []
         soundEffects.playStartSound()
 
         // Wire audio levels to the waveform pill
@@ -203,30 +203,26 @@ final class AppState: ObservableObject {
                 RecordingPillWindow.shared.pushLevel(level)
             }
         }
+
+        // Accumulate audio samples for batch transcription on stop
+        audioCaptureService.onBuffer = { [weak self] buffer in
+            guard let self else { return }
+            let frameLength = Int(buffer.frameLength)
+            guard frameLength > 0, let channelData = buffer.floatChannelData else { return }
+            let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
+            self.audioSamples.append(contentsOf: samples)
+        }
+
         RecordingPillWindow.shared.show()
 
-        audioTask = Task {
-            do {
-                listenLog("Starting audio capture...")
-                try audioCaptureService.start()
-                listenLog("Audio capture started OK, awaiting segments...")
-
-                for await segment in voiceActivityDetector.processAudio(from: audioCaptureService) {
-                    guard !Task.isCancelled else {
-                        listenLog("Audio task cancelled")
-                        break
-                    }
-                    listenLog("Got segment: \(segment.count) samples (\(String(format: "%.1f", Float(segment.count) / 16000.0))s)")
-                    await transcribeSegment(segment)
-                }
-                listenLog("Audio stream ended")
-            } catch {
-                listenLog("Audio capture ERROR: \(error)")
-                await MainActor.run {
-                    errorMessage = "Audio capture failed: \(error.localizedDescription)"
-                    stopRecording()
-                }
-            }
+        do {
+            try audioCaptureService.start()
+            listenLog("Audio capture started — accumulating samples")
+        } catch {
+            listenLog("Audio capture ERROR: \(error)")
+            errorMessage = "Audio capture failed: \(error.localizedDescription)"
+            isRecording = false
+            statusText = "Error"
         }
     }
 
@@ -237,63 +233,59 @@ final class AppState: ObservableObject {
         soundEffects.playStopSound()
         RecordingPillWindow.shared.hide()
 
-        // IMPORTANT: flush VAD BEFORE stopping audio capture
-        // This yields any remaining buffered speech as a final segment
-        voiceActivityDetector.flush()
-
-        // Stop audio capture — this finishes the audio stream
+        // Stop audio capture
         audioCaptureService.stop()
 
-        // Don't cancel audioTask immediately — let it finish processing the flushed segment
-        // Set up a delayed cleanup
-        let task = audioTask
-        audioTask = nil
+        // Batch transcribe all accumulated audio
+        let samples = audioSamples
+        audioSamples = []
+
+        guard !samples.isEmpty else {
+            listenLog("No audio samples captured")
+            statusText = "Ready"
+            return
+        }
+
+        listenLog("Transcribing \(samples.count) samples (\(String(format: "%.1f", Float(samples.count) / 16000.0))s)...")
+
         Task {
-            // Give the transcription task a few seconds to finish processing
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            task?.cancel()
-            await MainActor.run {
-                if self.statusText == "Transcribing..." {
-                    self.statusText = "Ready"
+            do {
+                let text = try await whisperService.transcribe(audioData: samples)
+                await MainActor.run {
+                    handleTranscription(text)
+                }
+            } catch {
+                listenLog("Transcription ERROR: \(error)")
+                await MainActor.run {
+                    errorMessage = "Transcription failed: \(error.localizedDescription)"
+                    statusText = "Ready"
                 }
             }
         }
-        listenLog("Recording stopped, waiting for transcription...")
     }
 
     // MARK: - Transcription
 
-    private func transcribeSegment(_ audioData: [Float]) async {
-        do {
-            listenLog("Transcribing segment: \(audioData.count) samples (\(String(format: "%.1f", Float(audioData.count) / 16000.0))s)")
-            let text = try await whisperService.transcribe(audioData: audioData)
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            listenLog("Transcription result: '\(trimmed)' (raw: '\(text)')")
-
-            guard !trimmed.isEmpty else {
-                listenLog("Transcription was empty, skipping")
-                return
-            }
-
-            await MainActor.run {
-                lastTranscription = trimmed
-                transcriptions.append(trimmed)
-                statusText = "Ready"
-                // Keep bounded
-                if transcriptions.count > 200 {
-                    transcriptions.removeFirst()
-                }
-            }
-
-            // Insert text into active app
-            listenLog("Inserting text: '\(trimmed)'")
-            textInserter.insertText(trimmed)
-        } catch {
-            listenLog("Transcription ERROR: \(error)")
-            await MainActor.run {
-                errorMessage = "Transcription failed: \(error.localizedDescription)"
-                statusText = "Ready"
-            }
+    private func handleTranscription(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            listenLog("Transcription was empty, skipping")
+            statusText = "Ready"
+            return
         }
+
+        listenLog("Transcription: '\(trimmed)'")
+        lastTranscription = trimmed
+        transcriptions.append(trimmed)
+        statusText = "Ready"
+
+        // Keep bounded
+        if transcriptions.count > 200 {
+            transcriptions.removeFirst()
+        }
+
+        // Insert text into active app
+        listenLog("Inserting text: '\(trimmed)'")
+        textInserter.insertText(trimmed)
     }
 }

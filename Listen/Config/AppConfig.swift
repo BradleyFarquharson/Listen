@@ -17,13 +17,8 @@ final class AppConfig: ObservableObject {
     @Published var sampleRate: Int = 16000
     @Published var channels: Int = 1
 
-    // MARK: - VAD (internal defaults, not user-facing)
-    @Published var energyThreshold: Float = 0.01
-    @Published var minSpeechMs: Int = 250
-    @Published var minSilenceMs: Int = 700
-
     // MARK: - Model (internal, not user-facing)
-    @Published var modelName: String = "parakeet-tdt-0.6b"
+    @Published var modelName: String = "parakeet-tdt-0.6b-v2"
 
     enum RecordingMode: String, CaseIterable {
         case pushToTalk = "push-to-talk"

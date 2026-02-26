@@ -1,14 +1,11 @@
 import AVFoundation
+import Accelerate
 import Foundation
 
 /// Captures microphone audio using AVAudioEngine and provides 16kHz mono Float32 samples.
 final class AudioCaptureService {
     private let engine = AVAudioEngine()
     private var isRunning = false
-
-    /// Continuation for streaming audio chunks to consumers.
-    private var continuation: AsyncStream<[Float]>.Continuation?
-    private var _stream: AsyncStream<[Float]>?
 
     /// The target format: 16kHz mono Float32.
     private let targetFormat = AVAudioFormat(
@@ -18,12 +15,30 @@ final class AudioCaptureService {
         interleaved: false
     )!
 
+    /// Audio format converter (proper polyphase resampling).
+    private var converter: AVAudioConverter?
+
+    /// High-pass filter state for removing low-frequency rumble/hum.
+    private var hpPrevInput: Float = 0
+    private var hpPrevOutput: Float = 0
+
     private var chunkCount = 0
 
     /// Current audio level (RMS) — updated on every chunk from audio thread.
     var onLevel: ((Float) -> Void)?
 
-    /// Start capturing audio. Returns an AsyncStream of Float32 chunks.
+    /// Raw PCM buffer callback — forwards 16kHz mono buffers to the streaming ASR manager.
+    var onBuffer: ((AVAudioPCMBuffer) -> Void)?
+
+    /// Compute high-pass filter coefficient for a given cutoff frequency.
+    /// Single-pole filter: y[n] = alpha * (y[n-1] + x[n] - x[n-1])
+    private static func highPassAlpha(cutoff: Float, sampleRate: Float) -> Float {
+        let rc = 1.0 / (2.0 * Float.pi * cutoff)
+        let dt = 1.0 / sampleRate
+        return rc / (rc + dt)
+    }
+
+    /// Start capturing audio. Forwards buffers via `onBuffer` and levels via `onLevel`.
     func start() throws {
         guard !isRunning else { return }
 
@@ -33,73 +48,85 @@ final class AudioCaptureService {
         listenLog("Audio input format: \(inputFormat)")
         listenLog("Audio target format: \(targetFormat)")
 
-        // Create stream BEFORE starting the engine
-        let stream = AsyncStream<[Float]> { [weak self] continuation in
-            guard let self = self else { return }
-            self.continuation = continuation
-            self.chunkCount = 0
+        // Create AVAudioConverter for proper resampling (polyphase, not linear interpolation)
+        guard let conv = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            throw AudioCaptureError.converterCreationFailed
         }
+        conv.sampleRateConverterQuality = .max
+        self.converter = conv
 
-        _stream = stream
+        // Reset filter state
+        hpPrevInput = 0
+        hpPrevOutput = 0
 
-        // Install tap with a simpler approach — convert manually
-        let inputSampleRate = inputFormat.sampleRate
-        let inputChannels = inputFormat.channelCount
-        listenLog("Mic sample rate: \(inputSampleRate), channels: \(inputChannels)")
+        // High-pass filter coefficient: ~80Hz cutoff removes rumble, AC hum, and mic handling noise
+        let hpAlpha = Self.highPassAlpha(cutoff: 80, sampleRate: 16000)
+
+        chunkCount = 0
+
+        listenLog("Mic sample rate: \(inputFormat.sampleRate), channels: \(inputFormat.channelCount)")
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self = self, let continuation = self.continuation else { return }
+            guard let self = self, let converter = self.converter else { return }
 
-            // Manual conversion: extract samples, convert to mono, downsample to 16kHz
-            guard let channelData = buffer.floatChannelData else { return }
-            let frameLength = Int(buffer.frameLength)
-            guard frameLength > 0 else { return }
+            // Use AVAudioConverter for high-quality resampling + automatic channel mixing
+            let ratio = inputFormat.sampleRate / 16000.0
+            let outputFrames = AVAudioFrameCount(Double(buffer.frameLength) / ratio)
+            guard outputFrames > 0 else { return }
 
-            // Get mono samples (average channels if stereo)
-            var monoSamples: [Float]
-            if inputChannels == 1 {
-                monoSamples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
-            } else {
-                // Mix to mono
-                monoSamples = [Float](repeating: 0, count: frameLength)
-                for ch in 0..<Int(inputChannels) {
-                    let chPtr = channelData[ch]
-                    for i in 0..<frameLength {
-                        monoSamples[i] += chPtr[i]
-                    }
+            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: self.targetFormat, frameCapacity: outputFrames) else { return }
+
+            var error: NSError?
+            var consumed = false
+            converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+                if consumed {
+                    outStatus.pointee = .noDataNow
+                    return nil
                 }
-                let scale = 1.0 / Float(inputChannels)
-                for i in 0..<frameLength {
-                    monoSamples[i] *= scale
-                }
+                consumed = true
+                outStatus.pointee = .haveData
+                return buffer
             }
 
-            // Downsample to 16kHz using simple linear interpolation
-            let ratio = inputSampleRate / 16000.0
-            let outputLength = Int(Double(frameLength) / ratio)
-            guard outputLength > 0 else { return }
-
-            var resampled = [Float](repeating: 0, count: outputLength)
-            for i in 0..<outputLength {
-                let srcIdx = Double(i) * ratio
-                let idx0 = Int(srcIdx)
-                let frac = Float(srcIdx - Double(idx0))
-                let idx1 = min(idx0 + 1, frameLength - 1)
-                resampled[i] = monoSamples[idx0] * (1.0 - frac) + monoSamples[idx1] * frac
+            if let error = error {
+                if self.chunkCount == 0 {
+                    listenLog("Converter error: \(error)")
+                }
+                return
             }
 
-            continuation.yield(resampled)
+            // Forward raw PCM buffer to streaming ASR (before float extraction)
+            self.onBuffer?(outputBuffer)
+
+            let frameLength = Int(outputBuffer.frameLength)
+            guard frameLength > 0, let channelData = outputBuffer.floatChannelData else { return }
+
+            var samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
+
+            // Apply single-pole high-pass filter: y[n] = alpha * (y[n-1] + x[n] - x[n-1])
+            // Removes frequencies below ~80Hz (rumble, AC hum, handling noise)
+            var prevIn = self.hpPrevInput
+            var prevOut = self.hpPrevOutput
+            for i in 0..<samples.count {
+                let x = samples[i]
+                prevOut = hpAlpha * (prevOut + x - prevIn)
+                prevIn = x
+                samples[i] = prevOut
+            }
+            self.hpPrevInput = prevIn
+            self.hpPrevOutput = prevOut
 
             // Compute RMS and send to level callback for waveform visualization
-            let rms = sqrt(resampled.reduce(Float(0)) { $0 + $1 * $1 } / max(Float(resampled.count), 1))
+            var rms: Float = 0
+            vDSP_rmsqv(samples, 1, &rms, vDSP_Length(samples.count))
             self.onLevel?(rms)
 
             self.chunkCount += 1
             if self.chunkCount == 1 {
-                listenLog("First audio chunk: \(resampled.count) samples from \(frameLength) input frames")
+                listenLog("First audio chunk: \(samples.count) samples from \(buffer.frameLength) input frames")
             }
             if self.chunkCount % 100 == 0 {
-                listenLog("Audio chunk #\(self.chunkCount): \(resampled.count) samples, RMS=\(String(format: "%.4f", rms))")
+                listenLog("Audio chunk #\(self.chunkCount): \(samples.count) samples, RMS=\(String(format: "%.4f", rms))")
             }
         }
 
@@ -109,19 +136,13 @@ final class AudioCaptureService {
         listenLog("AVAudioEngine started successfully")
     }
 
-    /// The audio stream. Call start() first.
-    var audioStream: AsyncStream<[Float]> {
-        _stream ?? AsyncStream { $0.finish() }
-    }
-
     func stop() {
         guard isRunning else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRunning = false
-        continuation?.finish()
-        continuation = nil
-        _stream = nil
+        onBuffer = nil
+        converter = nil
         listenLog("Audio capture stopped after \(chunkCount) chunks")
     }
 
